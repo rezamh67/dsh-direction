@@ -85,19 +85,48 @@ change cannot break this plugin:
 5. If a data attribute was renamed, update `CONTENT_CONTAINERS` in
    `src/styles.js`, `LTR_ISLANDS` in `src/styles.js`, and the tests, then rebuild.
 
+## Diagnostics
+
+`window.__DSH_DIRECTION__.diagnose()` answers "the control is on screen but the
+page still reads left-to-right" in one call. It reports the mode, scope, root and
+body attributes, whether the stylesheet is present and byte-identical to the
+source, how many containers were marked `dir="auto"` out of how many matched, and
+for each probed surface its `dir`, computed `direction`, computed `text-align`
+and computed `unicode-bidi`.
+
+The three failure classes it separates:
+
+| Symptom in the report | Meaning |
+|---|---|
+| `stylesheet.present: false`, or `matchesSource: false` | The bundle the page loaded is not the bundle on disk — restart the host, then hard-refresh. |
+| `containers.markedAuto: 0` of `matched: 6` | The controller never reconciled. Check `rootAttributes` for a missing `data-dsh-direction`. |
+| `probes.*.direction` / `.textAlign` still at the LTR default | A rule lost the cascade. `tests/cascade.test.mjs` asserts the winner for every surface — run it before touching the sheet. |
+
+`scripts/browser-check.mjs` is a real-Chrome rendering check (it measures the
+media box of a Persian paragraph against the flow's right edge). **It skips in a
+sandboxed environment**: Chrome's renderer needs named pipes, which the DSH file
+sandbox blocks, so the process exits with no output. The cascade tests exist
+because attribute-level assertions and layout assertions are not
+interchangeable, and only the first is always available.
+
 ## Known limitations
 
-- **The composer is not mirrored.** The caret model in DSH's Lexical editor is
-  left-to-right; forcing the editor container to RTL desynchronises the caret
-  from the text. The composer therefore keeps `direction: ltr` and follows a
-  forced direction only in `text-align`.
 - **Under `interface` scope the shell geometry mirrors** (sidebars swap sides,
   absolute-positioned elements follow). This is correct RTL presentation and it
   is opt-in; the default `messages` scope never moves a panel.
-- **`auto` cannot fix a mixed-script paragraph.** The CSS plaintext algorithm
-  decides per block from its first strong character. A paragraph that opens with
-  English and continues in Persian is laid out left-to-right. Force `rtl` for
-  that content.
+- **`auto` cannot fix a mixed-script paragraph.** The CSS plaintext algorithm and
+  `dir="auto"` both decide per block from its first strong character. A paragraph
+  that opens with English and continues in Persian is laid out left-to-right.
+  Force `rtl` for that content.
+- **In `ltr` mode on an already-LTR page nothing visibly changes.** That is the
+  point of the mode: it is the escape hatch for a block that resolved the wrong
+  way, not a transformation.
+- **The composer's caret in rtl mode follows the browser's own contenteditable
+  direction handling.** The editor is flipped along with the transcript rather
+  than left alone; if a future DSH editor reports caret problems under RTL, exclude
+  `[data-lexical-editor]` from `READING_SURFACES` and the forced rules at once —
+  the cascade tests will fail until both are changed together, which is the
+  intended coupling.
 - **The width override moves two DSH variables together**
   (`--dsh-chat-user-width` and `--dsh-chat-content-width`). If DSH derives the
   composer card from a third variable in a later version, the card and the

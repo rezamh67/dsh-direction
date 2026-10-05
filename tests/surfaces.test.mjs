@@ -73,14 +73,23 @@ describe('stylesheet', () => {
     }
   });
 
-  it('pins the code islands left-to-right', () => {
-    assert.match(STYLESHEET, /\[data-dsh-direction\] pre,/);
-    assert.match(STYLESHEET, /direction: ltr !important;/);
+  it('protects the code islands without making a direction unforceable', () => {
+    assert.match(STYLESHEET, /:where\(\[data-dsh-direction\] pre\)/);
     assert.match(STYLESHEET, /unicode-bidi: isolate !important;/);
+    /* A forced direction must be able to win on `direction`; the isolation is
+       what protects the payload, not an !important direction pin. */
+    assert.doesNotMatch(STYLESHEET, /direction: ltr !important;/);
   });
 
   it('gives paragraph leaves their own base direction', () => {
     assert.match(STYLESHEET, /unicode-bidi: plaintext;/);
+  });
+
+  it('lets a forced direction outrank detection without source-order luck', () => {
+    /* The detection rules are wrapped in :where() so they contribute zero
+       specificity; the forced rules are not. That removes the tie. */
+    assert.match(STYLESHEET, /:where\(\[data-dsh-direction\] p\)/);
+    assert.match(STYLESHEET, /\[data-dsh-direction\]\[data-dsh-direction-value="rtl"\] p/);
   });
 
   it('leaves the overlay layer alone when the shell mirrors', () => {

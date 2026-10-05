@@ -83,15 +83,28 @@ window.__DSH_DIRECTION__.reset()
 
 ## Code safety
 
-Code, terminal output and tool payloads are never mirrored. Code blocks, tables, file paths, tool names and every `[data-lexical-editor]` composer region are pinned to `direction: ltr` with `unicode-bidi: isolate`, so a right-to-left page can never reverse a `diff`, a shell command, or a file path. The composer is the one surface that keeps `direction: ltr` outright: DSH's caret model is left-to-right, and forcing the editor container to RTL desynchronises the caret from the text — see [Known limitations](docs/COMPATIBILITY.md#known-limitations).
+Code, terminal output and tool payloads are never mirrored. Code blocks, tables, tool payloads and diffs keep `direction: ltr` and are isolated with `unicode-bidi: isolate`, so a right-to-left page can never reverse a `diff`, a shell command or a file path — while the block itself still moves to the mode's edge. See [Known limitations](docs/COMPATIBILITY.md#known-limitations) for the composer and mixed-script cases.
+
+## Troubleshooting
+
+If the toggle is on screen but the page still reads left-to-right, run this in the browser console:
+
+```js
+window.__DSH_DIRECTION__.diagnose()
+```
+
+It reports the mode, the root and body attributes, whether the stylesheet is present and identical to the source, and the computed `direction`/`text-align`/`unicode-bidi` of every directed surface — enough to tell "a stale bundle is loaded" apart from "a rule lost the cascade".
 
 ## How it works
 
-Three techniques, in order of importance:
+The short version:
 
-1. **`dir="auto"` on the content containers** (`[data-chat-flow]`, `[data-conversation-scroll]`, `[data-composer-card]`, `[data-composer-seat]`). A controller marks every current container and a single `MutationObserver` collapsed into one animation frame marks the ones that mount later.
-2. **`unicode-bidi: plaintext` on paragraph-level leaves.** The CSS plaintext algorithm gives *every* block its own base direction from its first strong character. That is what lets a Persian paragraph and an English paragraph sit in one transcript and each read naturally — with no per-node JavaScript and no text re-measurement.
-3. **`direction: ltr; unicode-bidi: isolate` on code, terminals, diffs and editors.** Rule 3 is more specific than rules 1–2, so it wins wherever it applies.
+1. **Containers** (`[data-chat-flow]`, `[data-composer-card]`, the editor) get `dir="auto"` from the controller, plus `unicode-bidi: plaintext` and `text-align: start`. The attribute is the decision; `text-align: start` is what lets that decision choose the edge — without it, `text-align` inherits `start` from the LTR shell, where `start` means left, and right-to-left text stays pinned to the left edge.
+2. **Paragraph-level leaves** (`p`, `li`, headings, cells) get `unicode-bidi: plaintext`, so each block resolves its own base direction from its first strong character. That is what lets a Persian paragraph and an English paragraph in one transcript each read naturally.
+3. **Code and tool payloads** are isolated with `unicode-bidi: isolate`, so their glyph order survives.
+4. **A forced mode** overrides 1–2 at both the container and the leaf level.
+
+The rules that implement 1–3 are wrapped in `:where()`, so they contribute **zero specificity** and a forced direction always outranks detection without depending on source order. That tie was the root cause of a real defect in 0.1.0: the forced rules and the detection rules targeted the same elements with equal specificity, so the winner came down to rule order.
 
 Under `interface` scope the document root gets `dir`, and only then are two positional utilities replaced by class name (the assistant action row and the user bubble stack). Everything else inherits the mirror from the framework's own logical properties. The plugin's own overlay is deliberately outside the frame, so mirroring can never move it.
 
@@ -129,8 +142,8 @@ dsh-direction/
 ```sh
 pnpm run check      # build + verify + tests + naming profile
 pnpm run build      # src/ -> dist/
-pnpm test           # node:test suites (53 tests)
-pnpm run verify     # 44 contract + DOM behaviour gates
+pnpm test           # node:test suites (86 tests)
+pnpm run verify     # contract + DOM behaviour gates
 pnpm run inspect    # load the installed profile with DSH's boot code
 ```
 
@@ -140,10 +153,19 @@ The transform is statement-level rather than a blind regex, and every stage is a
 
 ## Verified
 
-- **53 tests** (`node --test`) across the state machine, i18n, stylesheet scoping and the real generated bundle in jsdom.
-- **44 verification gates**, including a live Cordis activation of the host half and a real-DOM pass that asserts every document effect and its exact retraction on unload.
+- **86 tests** (`node --test`): the state machine, i18n, the real generated bundle in jsdom, and **`tests/cascade.test.mjs`**, which resolves the CSS cascade and asserts which declaration actually WINS for every directed surface.
+- **Contract + DOM behaviour gates** in `scripts/verify.mjs`, including a live Cordis activation of the host half and a real-DOM pass that asserts every document effect and its exact retraction on unload.
 - **Profile inspection with DSH's own `loadProfileDirectory()`**: the bundle row resolves, its patch parses, and the client declaration is accepted.
 - **Community naming profile**: compatible (two advisory warnings about the published package name, documented below).
+
+The cascade suite exists because attribute assertions passed while the feature was
+broken. In 0.1.0 the controller wrote every attribute correctly and the page still
+read left-to-right: the composer and editor were pinned `direction: ltr
+!important` (so no mode could reach them) and the paragraph leaves had
+`unicode-bidi: plaintext` but no `text-align`, so blocks that resolved to RTL
+stayed on the left edge. Both defects are assertion-invisible at the attribute
+level and assertion-obvious at the cascade level. `:where()` on the detection
+rules now guarantees the forced rules win regardless of source order.
 
 Naming warnings, for transparency: the namespace `dsh-direction` resembles the
 community-reserved `dsh` prefix, and the loader id does not carry the
@@ -151,8 +173,8 @@ collision-resistant `dsh-direction-direction` prefix. Both are *recommendations*
 from a community profile, not Harness requirements, and the upstream policy was
 verified against an older Harness (`dsh-v0.1.2-alpha.2`) than this plugin
 targets — so the published name is kept. See
-[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the exact contracts and the
-upgrade checklist.
+[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the exact contracts, the
+diagnostics entry point, and the upgrade checklist.
 
 Verified on **DSH `0.1.5-rc.1`** (client packages `0.1.5-rc.2`), Windows, Node 24,
 pnpm 11.

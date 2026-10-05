@@ -1,6 +1,6 @@
 {
   "name": "dsh-direction",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Text direction for the DeepSeek Harness Web UI: an Auto / RTL / LTR control for the conversation and the whole shell, with per-block bidi detection and left-to-right code islands. پلاگین جهت متن (راست‌به‌چپ/چپ‌به‌راست) برای DeepSeek Harness.",
   "license": "MIT",
   "type": "module",

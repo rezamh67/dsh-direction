@@ -21,7 +21,7 @@
  * @module dsh-direction/client
  */
 
-import { CONTENT_CONTAINERS, installStylesheet } from './styles.js';
+import { CONTENT_CONTAINERS, PROBE_SELECTORS, STYLESHEET, installStylesheet } from './styles.js';
 import { createOverlayButton } from './overlay-button.js';
 import { createSettingsRow } from './settings-row.js';
 import { resolveLocale, translator } from './i18n.js';
@@ -154,7 +154,52 @@ export function apply(ctx) {
     setScope: (/** @type {import('./direction.js').Scope} */ value) => store.update({ scope: value }),
     setAlign: (/** @type {import('./direction.js').Align} */ value) => store.update({ align: value }),
     setWidth: (/** @type {number} */ value) => store.update({ width: value }),
-    reset: () => store.reset()
+    reset: () => store.reset(),
+    /* A one-call probe for the case this plugin is hardest to debug in: the
+       control is on screen but the page still reads left-to-right. It reports
+       what the document actually looks like, so a report can tell "the
+       stylesheet never loaded" apart from "the rule lost a specificity fight"
+       apart from "the selector no longer matches this DSH version". */
+    diagnose: () => {
+      const root = document.documentElement;
+      const body = document.body;
+      const sheet = document.querySelector('style[data-plugin-css="dsh-direction/styles.css"]');
+      /** @type {Record<string, unknown>} */
+      const probes = {};
+      for (const probe of PROBE_SELECTORS) {
+        const element = document.querySelector(probe.selector);
+        const computed = element === null ? null : getComputedStyle(element);
+        probes[probe.label] = {
+          matched: element !== null,
+          dir: element === null ? null : element.getAttribute('dir'),
+          direction: computed === null ? null : computed.direction,
+          textAlign: computed === null ? null : computed.textAlign,
+          unicodeBidi: computed === null ? null : computed.unicodeBidi
+        };
+      }
+      const containers = document.querySelectorAll(CONTENT_CONTAINERS);
+      return {
+        preference: store.getSnapshot().preference,
+        rootAttributes: {
+          mode: root.getAttribute('data-dsh-direction'),
+          scope: root.getAttribute('data-dsh-direction-scope'),
+          align: root.getAttribute('data-dsh-direction-align'),
+          dir: root.getAttribute('dir'),
+          bodyDirection: body.getAttribute('data-dsh-direction-value'),
+          bodyDir: body.getAttribute('dir')
+        },
+        stylesheet: {
+          present: sheet !== null,
+          characters: sheet === null ? 0 : (sheet.textContent ?? '').length,
+          matchesSource: sheet !== null && sheet.textContent === STYLESHEET
+        },
+        containers: {
+          matched: containers.length,
+          markedAuto: [...containers].filter((element) => element.getAttribute('dir') === 'auto').length
+        },
+        probes
+      };
+    }
   };
   ctx.effect(
     () => () => {
