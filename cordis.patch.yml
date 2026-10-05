@@ -1,0 +1,13 @@
+# dsh-direction bundle patch: mounts the plugin row.
+#
+# One row serves both faces. The Loader imports this package's Node entry (the
+# `apply` host plugin), and @deepseek-ai/dsh-client-modules discovers the same
+# package's `dsh.client` declaration, hashes client.js into window.__DSH_BOOT__,
+# and serves it from /plugins/dsh-direction/client.js.
+#
+# `id` is the stable composition key: the last patch layer that addresses
+# `dsh-direction` wins, so a profile can retarget the row without touching this
+# file.
+- insert:
+    - id: dsh-direction
+      name: dsh-direction

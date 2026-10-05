@@ -1,0 +1,23 @@
+{
+  "$schema": "./plugin-naming.schema.json",
+  "schemaVersion": 1,
+  "policy": "dsh-plugin-naming/v1",
+  "plugin": {
+    "namespace": "dsh-direction",
+    "name": "direction",
+    "coordinate": "dsh-direction/direction",
+    "packageName": "dsh-direction"
+  },
+  "names": {
+    "pluginNames": ["direction"],
+    "loaderIds": ["dsh-direction"],
+    "services": [],
+    "tools": [],
+    "commands": [],
+    "skills": [],
+    "skillProviders": [],
+    "events": [],
+    "settingsNamespaces": [],
+    "routes": []
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "name": "dsh-direction",
+  "version": "0.1.0",
+  "description": "Text direction for the DeepSeek Harness Web UI: an Auto / RTL / LTR control for the conversation and the whole shell, with per-block bidi detection and left-to-right code islands. پلاگین جهت متن (راست‌به‌چپ/چپ‌به‌راست) برای DeepSeek Harness.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "default": "./dist/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "cordis",
+    "plugin",
+    "rtl",
+    "ltr",
+    "bidi",
+    "direction",
+    "i18n",
+    "persian",
+    "farsi",
+    "arabic",
+    "hebrew",
+    "راست‌به‌چپ",
+    "فارسی",
+    "جهت"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "external": [
+        "react"
+      ],
+      "inject": []
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.1.5-rc.1": "compatible"
+      }
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "verify": "node scripts/build.mjs && node scripts/verify.mjs",
+    "check": "node scripts/build.mjs && node scripts/verify.mjs && node --test \"tests/**/*.test.mjs\" && node scripts/check-naming.mjs",
+    "check:naming": "node scripts/check-naming.mjs",
+    "inspect": "node scripts/inspect-profile.mjs",
+    "install:plugin": "node scripts/install.mjs",
+    "uninstall:plugin": "node scripts/install.mjs --uninstall",
+    "typecheck": "tsc --noEmit --allowJs --checkJs --target es2022 --module esnext --moduleResolution bundler --lib es2022,dom --strict false src/*.js"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.0",
+    "typescript": "^5.6.0"
+  }
+}
