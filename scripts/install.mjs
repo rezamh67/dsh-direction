@@ -41,25 +41,33 @@ const DEFAULT_HOME = process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh');
  * @returns {{ profile: string, home: string, link: boolean, uninstall: boolean, dryRun: boolean, keepPatch: boolean }} options.
  */
 function parseArgs(argv) {
-  /** @type {{ profile: string, home: string, link: boolean, uninstall: boolean, dryRun: boolean, keepPatch: boolean }} */
+  /** @type {{ profile: string, home: string, link: boolean, uninstall: boolean, dryRun: boolean, keepPatch: boolean, allProfiles: boolean, explicitProfile: boolean }} */
   const options = {
+    /* The ACTIVE profile is the one to default to. A profile is not a global
+       setting: `dsh web` reads DSH_PROFILE at startup, so installing into a
+       different profile than the running server is a silent no-op that looks
+       exactly like a broken plugin. */
     profile: process.env.DSH_PROFILE ?? 'desktop',
     home: DEFAULT_HOME,
     link: false,
     uninstall: false,
     dryRun: false,
-    keepPatch: false
+    keepPatch: false,
+    allProfiles: false,
+    explicitProfile: false
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const next = argv[index + 1];
     if (flag === '--profile' && next !== undefined) {
       options.profile = next;
+      options.explicitProfile = true;
       index += 1;
     } else if (flag === '--home' && next !== undefined) {
       options.home = next;
       index += 1;
-    } else if (flag === '--link') options.link = true;
+    } else if (flag === '--all-profiles') options.allProfiles = true;
+    else if (flag === '--link') options.link = true;
     else if (flag === '--uninstall') options.uninstall = true;
     else if (flag === '--dry-run') options.dryRun = true;
     else if (flag === '--keep-patch') options.keepPatch = true;
@@ -74,6 +82,18 @@ function parseArgs(argv) {
 }
 
 /**
+ * Every profile in the Harness home that has a manifest.
+ *
+ * @param {string} home - the DSH home.
+ * @returns {string[]} profile names.
+ */
+function listProfiles(home) {
+  const root = path.join(home, 'profiles');
+  if (!existsSync(root)) return [];
+  return readdirSync(root).filter((entry) => existsSync(path.join(root, entry, 'package.json')));
+}
+
+/**
  * Resolve the profile directory and refuse to continue when it does not exist,
  * so a typo in `--profile` cannot create a half-profile somewhere unexpected.
  *
@@ -84,10 +104,7 @@ function parseArgs(argv) {
 function profileDir(home, profile) {
   const dir = path.join(home, 'profiles', profile);
   if (!existsSync(dir)) {
-    const profilesRoot = path.join(home, 'profiles');
-    const names = existsSync(profilesRoot)
-      ? readdirSync(profilesRoot).filter((entry) => existsSync(path.join(profilesRoot, entry, 'package.json')))
-      : [];
+    const names = listProfiles(home);
     throw new Error(
       `install: no profile at ${dir}${names.length > 0 ? ` (available: ${names.join(', ')})` : ''}\n` +
         '         pass --profile <name> or --home <DSH_HOME>'
@@ -153,13 +170,14 @@ async function readProfileManifest(file) {
 }
 
 /**
- * Install the plugin.
+ * Install the plugin into one profile.
  *
  * @param {ReturnType<typeof parseArgs>} options - parsed command line.
+ * @param {string} profile - the profile name to write.
  * @returns {Promise<void>} resolves after the report.
  */
-async function install(options) {
-  const dir = profileDir(options.home, options.profile);
+async function installInto(options, profile) {
+  const dir = profileDir(options.home, profile);
   const manifestPath = path.join(dir, 'package.json');
   const target = path.join(dir, 'node_modules', 'dsh-direction');
   const pkg = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8'));
@@ -194,11 +212,36 @@ async function install(options) {
     }
   }
 
-  console.log(`dsh-direction ${pkg.version} -> ${options.profile} profile`);
+  console.log(`dsh-direction ${pkg.version} -> ${profile} profile`);
   console.log(`  package : ${mode} ${target}`);
   console.log(`  manifest: ${changed ? 'updated' : 'already current'} ${manifestPath}`);
   if (changed && !options.dryRun) console.log(`  backup  : ${manifestPath}.dsh-direction.bak`);
   console.log(`  bundles : ${manifest.dsh.profile.bundles.join(', ')}`);
+}
+
+/**
+ * Install into the selected profile, or into every profile with `--all-profiles`,
+ * and warn when the target is not the profile the host is actually running.
+ *
+ * @param {ReturnType<typeof parseArgs>} options - parsed command line.
+ * @returns {Promise<void>} resolves after the report.
+ */
+async function install(options) {
+  const active = process.env.DSH_PROFILE;
+  const targets = options.allProfiles ? listProfiles(options.home) : [options.profile];
+  if (options.allProfiles && targets.length === 0) {
+    throw new Error(`install: no profiles with a manifest under ${path.join(options.home, 'profiles')}`);
+  }
+
+  for (const profile of targets) {
+    await installInto(options, profile);
+  }
+
+  console.log(`\nDSH_PROFILE is "${active ?? '(unset)'}"; the running host reads its bundles from that profile only.`);
+  if (!options.allProfiles && active !== undefined && active !== options.profile) {
+    console.log(`  warning: installed into "${options.profile}" but the active profile is "${active}".`);
+    console.log(`           re-run with --profile ${active} (or --all-profiles) or the host will not see the plugin.`);
+  }
   console.log('\nRestart the DSH Web UI (`dsh web`) and refresh the page, or reload the profile.');
   console.log('Verify in the browser console: window.__DSH_DIRECTION__');
 }
@@ -210,7 +253,21 @@ async function install(options) {
  * @returns {Promise<void>} resolves after the report.
  */
 async function uninstall(options) {
-  const dir = profileDir(options.home, options.profile);
+  const targets = options.allProfiles ? listProfiles(options.home) : [options.profile];
+  for (const profile of targets) {
+    await uninstallFrom(options, profile);
+  }
+}
+
+/**
+ * Remove the plugin from one profile.
+ *
+ * @param {ReturnType<typeof parseArgs>} options - parsed command line.
+ * @param {string} profile - the profile name to clean.
+ * @returns {Promise<void>} resolves after the report.
+ */
+async function uninstallFrom(options, profile) {
+  const dir = profileDir(options.home, profile);
   const manifestPath = path.join(dir, 'package.json');
   const target = path.join(dir, 'node_modules', 'dsh-direction');
   const pkg = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8'));
@@ -224,7 +281,7 @@ async function uninstall(options) {
   manifest.dsh.profile.bundles = bundles;
   if (!options.dryRun) await writeFile(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`, 'utf8');
 
-  console.log(`dsh-direction <- ${options.profile} profile`);
+  console.log(`dsh-direction <- ${profile} profile`);
   console.log(`  package : ${installed ? 'removed' : 'not present'} ${target}`);
   console.log(`  manifest: bundle row ${bundlesChanged ? 'removed' : 'was not present'}`);
   console.log('\nRestart the DSH Web UI to unload the plugin.');

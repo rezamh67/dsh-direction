@@ -1,11 +1,56 @@
 # Compatibility notes
 
-This plugin was built and verified against a specific DSH release. This file
+This plugin was built and verified against specific DSH releases. This file
 records the exact contracts it depends on, so an upgrade can be re-checked
 mechanically instead of by trial and error.
 
-**Verified against:** DSH `0.1.5-rc.1` (client packages `0.1.5-rc.2`), Windows,
-Node `24.18.1`, pnpm `11.7.0`.
+**Verified against:** DSH `0.1.5-rc.1` (client `0.1.5-rc.2`) — the build and test
+target — and DSH `0.2.0-rc.2` (client `0.2.0-rc.2`) — the host it is installed
+into. Windows, Node `24.18.1`, pnpm `11.7.0`.
+
+## Locate the profile you are actually running
+
+A DSH profile is not a global setting: `dsh web` reads `DSH_PROFILE` at startup
+and composes its entry list from that profile only. Installing into a different
+profile is a silent no-op that looks exactly like a broken plugin, so the
+installer now defaults to the active profile and warns on a mismatch.
+
+```sh
+echo $DSH_PROFILE                                   # the profile the host uses
+node scripts/inspect-profile.mjs                    # defaults to DSH_PROFILE
+node scripts/install.mjs                            # installs into DSH_PROFILE
+node scripts/install.mjs --all-profiles             # every profile with a manifest
+node <dsh>/lib/bin.js --dump-config --profile web   # the composed entry tree
+```
+
+**The `desktop` profile is managed exclusively by the Electron application.** The
+CLI refuses to read it (`error: profile "desktop" is managed exclusively by the
+Electron application`), and the application rewrites its
+`dsh.profile.bundles` list on its own reconciliation schedule. Installing the
+plugin there is therefore unsupported: use the profile the `dsh` CLI runs.
+
+## Verified against 0.2.0-rc.2 (host moved from 0.1.5)
+
+The client packages the host serves moved from `0.1.5-rc.2` to `0.2.0-rc.2`
+between releases. Every contract this plugin depends on was re-checked against the
+served bundles:
+
+| Contract | Result on `0.2.0-rc.2` |
+|---|---|
+| `window.__ModuleLoader__.load({ id, factory })` | Unchanged; `factory` is `(require) => Record<string, unknown>`. |
+| `dsh.client` / `exports["./client"]` | Unchanged; `dsh-client-modules` parses the same declaration. |
+| `shell.overlay` seat | Still declared by `ui-layout` (alongside a new `shell.leading`). |
+| `settings.general.item` seat | Still declared; registrants now include `ui-conversation`. |
+| `data-conversation-scroll`, `data-chat-flow` | Still in `ui-chat`. |
+| `data-composer-card`, `data-composer-seat`, `data-composer-placeholder`, `data-input-scroll`, `data-lexical-editor` | Still present, but **moved from `ui-chat` to `ui-conversation`**. The selectors are attribute-based, so nothing in this plugin changed — but the re-verification command must scan `ui-conversation` too. |
+
+That last row is the upgrade-relevant lesson: 0.2.0 split the conversation and
+composer surfaces across two packages. A selector written against a class name
+would have broken; an attribute selector survived. Use the shipped attributes.
+
+Two other 0.2.0 changes are on the upgrade radar but do not affect this plugin:
+`transcriptView` became optional (`ui-chat` config), and the Web work-details
+default moved to `detailed` (client code, not config).
 
 ## Host-side contracts
 
@@ -70,6 +115,16 @@ change cannot break this plugin:
 - No `cordis.yml` edits and no writes inside the DSH installation.
 - No dependence on `@deepseek-ai/dsh-client-ui-primitives` (not installed in
   0.1.5-rc.1; `MarkdownText` lives inside `ui-chat`).
+
+## Verify the re-verification command itself
+
+The `rg` command in the DOM-contracts section must scan **every** client package,
+not just `ui-chat`, or a relocated attribute looks like a removed one:
+
+```sh
+rg -n 'data-conversation-scroll|data-chat-flow|data-composer-card|data-composer-seat|data-lexical-editor|data-composer-placeholder|data-shell-overlay|data-input-scroll' \
+   node_modules/@deepseek-ai/dsh-client-ui-*/lib/client.js
+```
 
 ## Upgrade checklist
 
