@@ -4,6 +4,11 @@
 
 **به DeepSeek Harness حالت راست‌به‌چپ بده.** یک پلاگین DSH که کنترل **خودکار / RTL / LTR** را به رابط وب اضافه می‌کند — یک دکمهٔ یک‌کلیکی روی صفحه، به‌همراه یک ردیف تنظیمات برای جزئیات.
 
+[![npm version](https://img.shields.io/npm/v/dsh-direction.svg)](https://www.npmjs.com/package/dsh-direction)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-direction.svg)](https://www.npmjs.com/package/dsh-direction)
+[![CI](https://github.com/rezamh67/dsh-direction/actions/workflows/ci.yml/badge.svg)](https://github.com/rezamh67/dsh-direction/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 ---
 
 ## Why
@@ -34,6 +39,23 @@ Mode, scope, alignment and width are remembered per browser and re-applied on ev
 ## Install
 
 ```sh
+# from the npm registry — installs the package and registers it as a bundle
+dsh plugin --profile web add dsh-direction
+
+# restart the DSH Web UI
+dsh web
+```
+
+`dsh plugin add` runs the profile's own `pnpm add`, and because this package declares
+`dsh.bundle.patch`, DSH registers it in that profile's `dsh.profile.bundles` on its own —
+which is what makes `cordis.patch.yml` apply as a loader patch layer. Substitute the profile
+you actually boot (`--profile desktop`, `--profile tui`, …) for `web`.
+
+### From a local checkout
+
+```sh
+git clone https://github.com/rezamh67/dsh-direction.git
+cd dsh-direction
 pnpm install
 pnpm run build
 
